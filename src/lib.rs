@@ -302,8 +302,8 @@ impl CodeDebtScanner {
 
                             if let Ok(commit) = repo.find_commit(oid) {
                                 let timestamp = commit.time().seconds();
-                                let datetime = DateTime::from_timestamp(timestamp, 0)
-                                    .unwrap_or_else(Utc::now);
+                                let datetime =
+                                    DateTime::from_timestamp(timestamp, 0).unwrap_or_else(Utc::now);
                                 item.created_at = Some(datetime);
                                 let now = Utc::now();
                                 let duration = now.signed_duration_since(datetime);
