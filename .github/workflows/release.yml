@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+    - name: Get version from tag
+      id: get_version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release v${{ steps.get_version.outputs.version }}
+        draft: false
+        prerelease: false
+
+  build:
+    name: Build Binaries
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: codedebt-linux-x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            name: codedebt-linux-x86_64-musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: codedebt-windows-x86_64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: codedebt-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: codedebt-macos-aarch64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install musl tools
+      if: matrix.target == 'x86_64-unknown-linux-musl'
+      run: sudo apt-get install -y musl-tools
+
+    - name: Build binary
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Package binary (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        tar czf ${{ matrix.name }}.tar.gz codedebt
+        echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+        echo "ASSET_NAME=${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+
+    - name: Package binary (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        7z a ${{ matrix.name }}.zip codedebt.exe
+        echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.name }}.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "ASSET_NAME=${{ matrix.name }}.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.ASSET_PATH }}
+        asset_name: ${{ env.ASSET_NAME }}
+        asset_content_type: application/octet-stream
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update Homebrew formula
+      uses: dawidd6/action-homebrew-bump-formula@v3
+      with:
+        token: ${{ secrets.HOMEBREW_TOKEN }}
+        formula: codedebt

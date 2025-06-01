@@ -65,12 +65,18 @@ fn main() -> anyhow::Result<()> {
     let mut scanner = CodeDebtScanner::new();
 
     if let Some(extensions) = cli.extensions {
-        let exts: Vec<String> = extensions.split(',').map(|s| s.trim().to_string()).collect();
+        let exts: Vec<String> = extensions
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
         scanner = scanner.with_file_extensions(exts);
     }
 
     if let Some(ignore_dirs) = cli.ignore {
-        let dirs: Vec<String> = ignore_dirs.split(',').map(|s| s.trim().to_string()).collect();
+        let dirs: Vec<String> = ignore_dirs
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
         scanner = scanner.with_ignore_dirs(dirs);
     }
 
@@ -87,8 +93,9 @@ fn main() -> anyhow::Result<()> {
             } else {
                 print_pretty(&items);
             }
-            println!("\n{} Scanned in {:.2}ms", 
-                "⚡".bright_yellow(), 
+            println!(
+                "\n{} Scanned in {:.2}ms",
+                "⚡".bright_yellow(),
                 duration.as_secs_f64() * 1000.0
             );
         }
@@ -141,18 +148,22 @@ fn print_pretty(items: &[codedebt::CodeDebtItem]) {
 
 fn print_summary(scanner: &CodeDebtScanner, items: &[codedebt::CodeDebtItem]) {
     let summary = scanner.get_summary(items);
-    
+
     println!("{} Code Debt Summary:", "📊".cyan());
     println!("{}", "=".repeat(40));
-    
+
     let mut total = 0;
     for (pattern, count) in &summary {
         println!("{:15} {:>5}", pattern.purple(), count.to_string().yellow());
         total += count;
     }
-    
+
     println!("{}", "-".repeat(40));
-    println!("{:15} {:>5}", "TOTAL".bold(), total.to_string().bold().yellow());
+    println!(
+        "{:15} {:>5}",
+        "TOTAL".bold(),
+        total.to_string().bold().yellow()
+    );
 }
 
 fn print_csv(items: &[codedebt::CodeDebtItem]) {

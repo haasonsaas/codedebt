@@ -1,0 +1,71 @@
+name: Security Audit
+
+on:
+  schedule:
+    # Run at 00:00 UTC every day
+    - cron: '0 0 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+    - name: Run cargo audit
+      run: cargo audit
+
+  deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-deny
+      run: cargo install cargo-deny
+
+    - name: Run cargo deny
+      run: cargo deny check
+
+  supply-chain:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-supply-chain
+      run: cargo install cargo-supply-chain
+
+    - name: Run supply chain analysis
+      run: cargo supply-chain crates
+
+  outdated:
+    name: Check Outdated Dependencies
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-outdated
+      run: cargo install cargo-outdated
+
+    - name: Check for outdated dependencies
+      run: cargo outdated --exit-code 1
