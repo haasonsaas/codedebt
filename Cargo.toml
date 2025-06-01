@@ -2,6 +2,7 @@
 name = "codedebt"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.74.0"
 authors = ["Jonathan Haas <jonathan@haasonsaas.com>"]
 description = "Ultra-fast code debt detection library and CLI"
 readme = "README.md"
