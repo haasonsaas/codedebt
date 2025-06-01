@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use git2::{Repository, BlameOptions};
+use git2::{BlameOptions, Repository};
 use ignore::WalkBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ pub struct CodeDebtItem {
     pub line_content: String,
     pub pattern_type: String,
     pub severity: Severity,
-    
+
     // Enhanced intelligence
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
@@ -211,20 +211,20 @@ impl CodeDebtScanner {
 
         drop(tx);
         let mut results: Vec<CodeDebtItem> = rx.iter().collect();
-        
+
         // Add git blame information if enabled
         if self.enable_git_blame {
             self.add_git_information(&mut results);
         }
-        
+
         // Detect duplicates if enabled
         if self.detect_duplicates {
             self.detect_duplicate_patterns(&mut results);
         }
-        
+
         // Add file extension information
         self.add_file_extensions(&mut results);
-        
+
         results.sort_by(|a, b| {
             a.severity
                 .cmp(&b.severity)
@@ -286,18 +286,24 @@ impl CodeDebtScanner {
     fn add_git_information(&self, items: &mut [CodeDebtItem]) {
         if let Some(repo) = &self.git_repo {
             for item in items.iter_mut() {
-                if let Ok(relative_path) = item.file_path.strip_prefix(repo.workdir().unwrap_or_else(|| std::path::Path::new("."))) {
-                    if let Ok(blame) = repo.blame_file(relative_path, Some(&mut BlameOptions::new())) {
+                if let Ok(relative_path) = item
+                    .file_path
+                    .strip_prefix(repo.workdir().unwrap_or_else(|| std::path::Path::new(".")))
+                {
+                    if let Ok(blame) =
+                        repo.blame_file(relative_path, Some(&mut BlameOptions::new()))
+                    {
                         if let Some(hunk) = blame.get_line(item.line_number) {
                             let sig = hunk.final_signature();
                             let oid = hunk.final_commit_id();
-                            
+
                             item.author = sig.name().map(|s| s.to_string());
                             item.commit_hash = Some(oid.to_string());
-                            
+
                             if let Ok(commit) = repo.find_commit(oid) {
                                 let timestamp = commit.time().seconds();
-                                let datetime = DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now());
+                                let datetime = DateTime::from_timestamp(timestamp, 0)
+                                    .unwrap_or_else(Utc::now);
                                 item.created_at = Some(datetime);
                                 let now = Utc::now();
                                 let duration = now.signed_duration_since(datetime);
@@ -312,13 +318,13 @@ impl CodeDebtScanner {
 
     fn detect_duplicate_patterns(&self, items: &mut [CodeDebtItem]) {
         let mut pattern_counts: HashMap<String, usize> = HashMap::new();
-        
+
         // Count occurrences of similar patterns
         for item in items.iter() {
             let key = format!("{}:{}", item.pattern_type, item.line_content.trim());
             *pattern_counts.entry(key).or_insert(0) += 1;
         }
-        
+
         // Update duplicate counts
         for item in items.iter_mut() {
             let key = format!("{}:{}", item.pattern_type, item.line_content.trim());
@@ -349,7 +355,7 @@ impl CodeDebtScanner {
             if let Some(age) = item.age_days {
                 let bucket = match age {
                     0..=7 => "This week",
-                    8..=30 => "This month", 
+                    8..=30 => "This month",
                     31..=90 => "Last 3 months",
                     91..=365 => "This year",
                     _ => "Over a year",
@@ -365,9 +371,7 @@ impl CodeDebtScanner {
     pub fn filter_by_age(&self, items: &[CodeDebtItem], max_age_days: i64) -> Vec<CodeDebtItem> {
         items
             .iter()
-            .filter(|item| {
-                item.age_days.map_or(true, |age| age <= max_age_days)
-            })
+            .filter(|item| item.age_days.is_none_or(|age| age <= max_age_days))
             .cloned()
             .collect()
     }
