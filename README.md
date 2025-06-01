@@ -13,7 +13,11 @@ Ultra-fast code debt detection library and CLI tool written in Rust.
 
 ## Installation
 
-Build from source:
+```bash
+cargo install codedebt
+```
+
+Or build from source:
 ```bash
 git clone https://github.com/haasonsaas/codedebt
 cd codedebt
