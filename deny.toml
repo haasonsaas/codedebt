@@ -20,9 +20,6 @@ deny = [
     "AGPL-3.0",
 ]
 
-# Lint level for when multiple versions of the same license are detected
-multiple-versions = "warn"
-
 # Confidence threshold for detecting a license from a license text.
 confidence-threshold = 0.8
 
@@ -63,9 +60,6 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 
 # The lint level for security vulnerabilities
 vulnerability = "deny"
-
-# The lint level for unmaintained crates
-unmaintained = "warn"
 
 # The lint level for crates that have been yanked from their source registry
 yanked = "warn"
