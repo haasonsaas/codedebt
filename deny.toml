@@ -12,23 +12,12 @@ allow = [
     "Unicode-DFS-2016",
 ]
 
-# List of explicitly disallowed licenses
-deny = [
-    "GPL-2.0",
-    "GPL-3.0", 
-    "AGPL-1.0",
-    "AGPL-3.0",
-]
-
 # Confidence threshold for detecting a license from a license text.
 confidence-threshold = 0.8
 
 [bans]
 # Lint level for when multiple versions of the same crate are detected
 multiple-versions = "warn"
-
-# Lint level for when a crate version requirement is `*`
-wildcards = "allow"
 
 # The graph highlights used when creating dotgraphs for crates
 # with multiple versions
@@ -38,11 +27,7 @@ highlight = "all"
 allow = []
 
 # List of crates to deny
-deny = [
-    # Each entry the name of a crate and a version range. If version is
-    # not specified, all versions will be matched.
-    #{ name = "ansi_term", version = "*" },
-]
+deny = []
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = []
@@ -58,16 +43,8 @@ db-path = "~/.cargo/advisory-db"
 # The url(s) of the advisory databases to use
 db-urls = ["https://github.com/rustsec/advisory-db"]
 
-# The lint level for security vulnerabilities
-vulnerability = "deny"
-
 # The lint level for crates that have been yanked from their source registry
 yanked = "warn"
-
-# The lint level for crates with security notices. Note that as of
-# 2019-12-17 there are no security notice advisories in
-# https://github.com/rustsec/advisory-db
-notice = "warn"
 
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
