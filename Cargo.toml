@@ -2,9 +2,12 @@
 name = "codedebt"
 version = "0.1.0"
 edition = "2021"
+authors = ["Jonathan Haas <jonathan@haasonsaas.com>"]
 description = "Ultra-fast code debt detection library and CLI"
-license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/haasonsaas/codedebt"
 repository = "https://github.com/haasonsaas/codedebt"
+license = "MIT"
 keywords = ["code", "debt", "todo", "fixme", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 

@@ -13,11 +13,7 @@ Ultra-fast code debt detection library and CLI tool written in Rust.
 
 ## Installation
 
-```bash
-cargo install codedebt
-```
-
-Or build from source:
+Build from source:
 ```bash
 git clone https://github.com/haasonsaas/codedebt
 cd codedebt
@@ -47,6 +43,9 @@ codedebt --extensions "rs,py,js"
 
 # Ignore additional directories
 codedebt --ignore "vendor,tmp"
+
+# Get help
+codedebt --help
 ```
 
 ## Library Usage
@@ -78,25 +77,64 @@ let summary = scanner.get_summary(&items);
 
 ## Performance
 
-- **10-100x faster** than grep-based solutions
+- **Lightning fast** - scans large codebases in milliseconds
 - **Parallel processing** of files using Rayon
-- **Memory efficient** streaming
-- **Optimized regex** compilation
+- **Memory efficient** streaming with ignore crate
+- **Optimized regex** compilation and matching
+
+Example performance on evalops project (378 items found in 35ms):
+```
+⚡ Scanned in 34.46ms
+```
 
 ## Patterns Detected
 
 | Pattern | Severity | Description |
 |---------|----------|-------------|
 | HACK, XXX | Critical | Code that needs immediate attention |
+| PRODUCTION_DEBT | Critical | Temporary/placeholder code in production context |
 | FIXME | High | Broken code that needs fixing |
-| TODO | Medium | Future improvements |
 | TEMPORARY, PLACEHOLDER | High | Code not meant for production |
+| TODO | Medium | Future improvements |
+| NOTE.*fix | Medium | Notes about things that need fixing |
 | MOCK, STUB | Low | Test or development code |
+
+## Example Output
+
+```
+🔍 18 code debt items found:
+
+🚨 CRITICAL PRODUCTION_DEBT ./src/config.rs:42:15 placeholder="Production API Key"
+⚠️  HIGH TEMPORARY ./src/auth.rs:123:8 // Temporary workaround for OAuth
+📝 MEDIUM TODO ./src/utils.rs:67:4 // TODO: Add proper error handling
+💡 LOW MOCK_STUB ./tests/setup.rs:12:8 Mock database connection
+
+⚡ Scanned in 5.17ms
+```
 
 ## Supported Languages
 
 Rust, Python, JavaScript, TypeScript, Go, Java, C/C++, Ruby, PHP, C#, Swift, Kotlin, Scala, and more.
 
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+### Development
+
+```bash
+# Clone the repository
+git clone https://github.com/haasonsaas/codedebt
+cd codedebt
+
+# Build and test
+cargo build
+cargo test
+
+# Run on a sample project
+cargo run -- /path/to/test/project
+```
+
 ## License
 
-MIT
+MIT - see LICENSE file for details
