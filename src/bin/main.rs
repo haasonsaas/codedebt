@@ -31,6 +31,30 @@ struct Cli {
     /// Additional directories to ignore (comma-separated)
     #[arg(short, long)]
     ignore: Option<String>,
+
+    /// Enable git blame integration for age detection
+    #[arg(long)]
+    git_blame: bool,
+
+    /// Enable duplicate pattern detection
+    #[arg(long)]
+    detect_duplicates: bool,
+
+    /// Show file type distribution
+    #[arg(long)]
+    file_types: bool,
+
+    /// Show age distribution (requires --git-blame)
+    #[arg(long)]
+    age_distribution: bool,
+
+    /// Filter by maximum age in days (requires --git-blame)
+    #[arg(long)]
+    max_age: Option<i64>,
+
+    /// Show only duplicates with minimum count
+    #[arg(long)]
+    min_duplicates: Option<usize>,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -80,19 +104,61 @@ fn main() -> anyhow::Result<()> {
         scanner = scanner.with_ignore_dirs(dirs);
     }
 
+    // Configure enhanced intelligence features
+    if cli.git_blame {
+        scanner = scanner.with_git_blame(true);
+    }
+    
+    if cli.detect_duplicates {
+        scanner = scanner.with_duplicate_detection(true);
+    }
+
     let start = std::time::Instant::now();
     let all_items = scanner.scan(&cli.path)?;
     let duration = start.elapsed();
 
-    let items = scanner.filter_by_severity(&all_items, cli.severity.into());
+    // Apply filters
+    let mut filtered_items = scanner.filter_by_severity(&all_items, cli.severity.into());
+    
+    // Apply age filter if specified
+    if let Some(max_age) = cli.max_age {
+        if !cli.git_blame {
+            eprintln!("Warning: --max-age requires --git-blame to be enabled");
+        } else {
+            filtered_items = scanner.filter_by_age(&filtered_items, max_age);
+        }
+    }
+    
+    // Apply duplicate filter if specified
+    if let Some(min_duplicates) = cli.min_duplicates {
+        if !cli.detect_duplicates {
+            eprintln!("Warning: --min-duplicates requires --detect-duplicates to be enabled");
+        } else {
+            filtered_items = scanner.find_duplicates(&filtered_items, min_duplicates);
+        }
+    }
 
     match cli.format {
         OutputFormat::Pretty => {
             if cli.summary {
-                print_summary(&scanner, &items);
+                print_summary(&scanner, &filtered_items);
             } else {
-                print_pretty(&items);
+                print_pretty(&filtered_items);
             }
+            
+            // Show additional information if requested
+            if cli.file_types {
+                print_file_type_distribution(&scanner, &all_items);
+            }
+            
+            if cli.age_distribution {
+                if !cli.git_blame {
+                    eprintln!("Warning: --age-distribution requires --git-blame to be enabled");
+                } else {
+                    print_age_distribution(&scanner, &all_items);
+                }
+            }
+            
             println!(
                 "\n{} Scanned in {:.2}ms",
                 "⚡".bright_yellow(),
@@ -100,10 +166,10 @@ fn main() -> anyhow::Result<()> {
             );
         }
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(&items)?);
+            println!("{}", serde_json::to_string_pretty(&filtered_items)?);
         }
         OutputFormat::Csv => {
-            print_csv(&items);
+            print_csv(&filtered_items);
         }
     }
 
@@ -143,6 +209,36 @@ fn print_pretty(items: &[codedebt::CodeDebtItem]) {
             item.column.to_string().green(),
             item.line_content.trim()
         );
+
+        // Add enhanced information if available
+        let mut details = Vec::new();
+        
+        if let Some(author) = &item.author {
+            details.push(format!("👤 {}", author.dimmed()));
+        }
+        
+        if let Some(age_days) = item.age_days {
+            let age_str = if age_days == 0 {
+                "today".to_string()
+            } else if age_days == 1 {
+                "1 day ago".to_string()
+            } else if age_days < 30 {
+                format!("{} days ago", age_days)
+            } else if age_days < 365 {
+                format!("{} months ago", age_days / 30)
+            } else {
+                format!("{} years ago", age_days / 365)
+            };
+            details.push(format!("📅 {}", age_str.dimmed()));
+        }
+        
+        if item.duplicate_count > 1 {
+            details.push(format!("🔄 {} duplicates", item.duplicate_count.to_string().yellow()));
+        }
+        
+        if !details.is_empty() {
+            println!("    {}", details.join(" • "));
+        }
     }
 }
 
@@ -167,16 +263,55 @@ fn print_summary(scanner: &CodeDebtScanner, items: &[codedebt::CodeDebtItem]) {
 }
 
 fn print_csv(items: &[codedebt::CodeDebtItem]) {
-    println!("file_path,line_number,column,severity,pattern_type,line_content");
+    println!("file_path,line_number,column,severity,pattern_type,line_content,author,age_days,duplicate_count");
     for item in items {
         println!(
-            "{},{},{},{:?},{},\"{}\"",
+            "{},{},{},{:?},{},\"{}\",\"{}\",{},{}",
             item.file_path.display(),
             item.line_number,
             item.column,
             item.severity,
             item.pattern_type,
-            item.line_content.replace('"', "\"\"")
+            item.line_content.replace('"', "\"\""),
+            item.author.as_deref().unwrap_or(""),
+            item.age_days.unwrap_or(-1),
+            item.duplicate_count
         );
+    }
+}
+
+fn print_file_type_distribution(scanner: &CodeDebtScanner, items: &[codedebt::CodeDebtItem]) {
+    let distribution = scanner.get_file_type_summary(items);
+    if distribution.is_empty() {
+        return;
+    }
+
+    println!("\n{} File Type Distribution:", "📊".cyan());
+    println!("{}", "═".repeat(40));
+
+    let mut sorted_types: Vec<_> = distribution.iter().collect();
+    sorted_types.sort_by(|a, b| b.1.cmp(a.1));
+
+    for (file_type, count) in sorted_types {
+        println!("{:15} {:>5}", file_type.purple(), count.to_string().yellow());
+    }
+}
+
+fn print_age_distribution(scanner: &CodeDebtScanner, items: &[codedebt::CodeDebtItem]) {
+    let distribution = scanner.get_age_distribution(items);
+    if distribution.is_empty() {
+        return;
+    }
+
+    println!("\n{} Age Distribution:", "📅".cyan());
+    println!("{}", "═".repeat(40));
+
+    // Define order for age buckets
+    let order = ["This week", "This month", "Last 3 months", "This year", "Over a year", "Unknown age"];
+    
+    for bucket in order.iter() {
+        if let Some(count) = distribution.get(*bucket) {
+            println!("{:15} {:>5}", bucket.purple(), count.to_string().yellow());
+        }
     }
 }

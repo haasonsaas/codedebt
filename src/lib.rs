@@ -1,4 +1,6 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use git2::{Repository, BlameOptions};
 use ignore::WalkBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,19 @@ pub struct CodeDebtItem {
     pub line_content: String,
     pub pattern_type: String,
     pub severity: Severity,
+    
+    // Enhanced intelligence
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub age_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_extension: Option<String>,
+    pub duplicate_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -35,6 +50,9 @@ pub struct CodeDebtScanner {
     patterns: Vec<Pattern>,
     file_extensions: Vec<String>,
     ignore_dirs: Vec<String>,
+    enable_git_blame: bool,
+    detect_duplicates: bool,
+    git_repo: Option<Repository>,
 }
 
 impl Default for CodeDebtScanner {
@@ -114,6 +132,9 @@ impl CodeDebtScanner {
             patterns,
             file_extensions,
             ignore_dirs,
+            enable_git_blame: false,
+            detect_duplicates: false,
+            git_repo: None,
         }
     }
 
@@ -129,6 +150,22 @@ impl CodeDebtScanner {
 
     pub fn with_ignore_dirs(mut self, dirs: Vec<String>) -> Self {
         self.ignore_dirs = dirs;
+        self
+    }
+
+    pub fn with_git_blame(mut self, enable: bool) -> Self {
+        self.enable_git_blame = enable;
+        if enable {
+            // Try to open git repository
+            if let Ok(repo) = Repository::discover(".") {
+                self.git_repo = Some(repo);
+            }
+        }
+        self
+    }
+
+    pub fn with_duplicate_detection(mut self, enable: bool) -> Self {
+        self.detect_duplicates = enable;
         self
     }
 
@@ -174,6 +211,20 @@ impl CodeDebtScanner {
 
         drop(tx);
         let mut results: Vec<CodeDebtItem> = rx.iter().collect();
+        
+        // Add git blame information if enabled
+        if self.enable_git_blame {
+            self.add_git_information(&mut results);
+        }
+        
+        // Detect duplicates if enabled
+        if self.detect_duplicates {
+            self.detect_duplicate_patterns(&mut results);
+        }
+        
+        // Add file extension information
+        self.add_file_extensions(&mut results);
+        
         results.sort_by(|a, b| {
             a.severity
                 .cmp(&b.severity)
@@ -199,6 +250,12 @@ impl CodeDebtScanner {
                             line_content: line.trim().to_string(),
                             pattern_type: pattern.name.clone(),
                             severity: pattern.severity.clone(),
+                            author: None,
+                            age_days: None,
+                            commit_hash: None,
+                            created_at: None,
+                            file_extension: None,
+                            duplicate_count: 0,
                         })
                     })
                     .collect::<Vec<_>>()
@@ -222,6 +279,103 @@ impl CodeDebtScanner {
         items
             .iter()
             .filter(|item| item.severity <= min_severity)
+            .cloned()
+            .collect()
+    }
+
+    fn add_git_information(&self, items: &mut [CodeDebtItem]) {
+        if let Some(repo) = &self.git_repo {
+            for item in items.iter_mut() {
+                if let Ok(relative_path) = item.file_path.strip_prefix(repo.workdir().unwrap_or_else(|| std::path::Path::new("."))) {
+                    if let Ok(blame) = repo.blame_file(relative_path, Some(&mut BlameOptions::new())) {
+                        if let Some(hunk) = blame.get_line(item.line_number) {
+                            let sig = hunk.final_signature();
+                            let oid = hunk.final_commit_id();
+                            
+                            item.author = sig.name().map(|s| s.to_string());
+                            item.commit_hash = Some(oid.to_string());
+                            
+                            if let Ok(commit) = repo.find_commit(oid) {
+                                let timestamp = commit.time().seconds();
+                                let datetime = DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now());
+                                item.created_at = Some(datetime);
+                                let now = Utc::now();
+                                let duration = now.signed_duration_since(datetime);
+                                item.age_days = Some(duration.num_days());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn detect_duplicate_patterns(&self, items: &mut [CodeDebtItem]) {
+        let mut pattern_counts: HashMap<String, usize> = HashMap::new();
+        
+        // Count occurrences of similar patterns
+        for item in items.iter() {
+            let key = format!("{}:{}", item.pattern_type, item.line_content.trim());
+            *pattern_counts.entry(key).or_insert(0) += 1;
+        }
+        
+        // Update duplicate counts
+        for item in items.iter_mut() {
+            let key = format!("{}:{}", item.pattern_type, item.line_content.trim());
+            item.duplicate_count = pattern_counts.get(&key).copied().unwrap_or(0);
+        }
+    }
+
+    fn add_file_extensions(&self, items: &mut [CodeDebtItem]) {
+        for item in items.iter_mut() {
+            if let Some(ext) = item.file_path.extension() {
+                item.file_extension = ext.to_str().map(|s| s.to_string());
+            }
+        }
+    }
+
+    pub fn get_file_type_summary(&self, items: &[CodeDebtItem]) -> HashMap<String, usize> {
+        let mut summary = HashMap::new();
+        for item in items {
+            let file_type = item.file_extension.as_deref().unwrap_or("unknown");
+            *summary.entry(file_type.to_string()).or_insert(0) += 1;
+        }
+        summary
+    }
+
+    pub fn get_age_distribution(&self, items: &[CodeDebtItem]) -> HashMap<String, usize> {
+        let mut distribution = HashMap::new();
+        for item in items {
+            if let Some(age) = item.age_days {
+                let bucket = match age {
+                    0..=7 => "This week",
+                    8..=30 => "This month", 
+                    31..=90 => "Last 3 months",
+                    91..=365 => "This year",
+                    _ => "Over a year",
+                };
+                *distribution.entry(bucket.to_string()).or_insert(0) += 1;
+            } else {
+                *distribution.entry("Unknown age".to_string()).or_insert(0) += 1;
+            }
+        }
+        distribution
+    }
+
+    pub fn filter_by_age(&self, items: &[CodeDebtItem], max_age_days: i64) -> Vec<CodeDebtItem> {
+        items
+            .iter()
+            .filter(|item| {
+                item.age_days.map_or(true, |age| age <= max_age_days)
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub fn find_duplicates(&self, items: &[CodeDebtItem], min_count: usize) -> Vec<CodeDebtItem> {
+        items
+            .iter()
+            .filter(|item| item.duplicate_count >= min_count)
             .cloned()
             .collect()
     }
@@ -362,6 +516,12 @@ let temp_production_fix = true;
                 line_content: "// TODO: test".to_string(),
                 pattern_type: "TODO".to_string(),
                 severity: Severity::Medium,
+                author: None,
+                age_days: None,
+                commit_hash: None,
+                created_at: None,
+                file_extension: None,
+                duplicate_count: 0,
             },
             CodeDebtItem {
                 file_path: PathBuf::from("test.rs"),
@@ -370,6 +530,12 @@ let temp_production_fix = true;
                 line_content: "// TODO: another test".to_string(),
                 pattern_type: "TODO".to_string(),
                 severity: Severity::Medium,
+                author: None,
+                age_days: None,
+                commit_hash: None,
+                created_at: None,
+                file_extension: None,
+                duplicate_count: 0,
             },
             CodeDebtItem {
                 file_path: PathBuf::from("test.rs"),
@@ -378,6 +544,12 @@ let temp_production_fix = true;
                 line_content: "// FIXME: broken".to_string(),
                 pattern_type: "FIXME".to_string(),
                 severity: Severity::High,
+                author: None,
+                age_days: None,
+                commit_hash: None,
+                created_at: None,
+                file_extension: None,
+                duplicate_count: 0,
             },
         ];
 
@@ -398,6 +570,12 @@ let temp_production_fix = true;
                 line_content: "// TODO: test".to_string(),
                 pattern_type: "TODO".to_string(),
                 severity: Severity::Medium,
+                author: None,
+                age_days: None,
+                commit_hash: None,
+                created_at: None,
+                file_extension: None,
+                duplicate_count: 0,
             },
             CodeDebtItem {
                 file_path: PathBuf::from("test.rs"),
@@ -406,6 +584,12 @@ let temp_production_fix = true;
                 line_content: "// HACK: critical".to_string(),
                 pattern_type: "HACK".to_string(),
                 severity: Severity::Critical,
+                author: None,
+                age_days: None,
+                commit_hash: None,
+                created_at: None,
+                file_extension: None,
+                duplicate_count: 0,
             },
             CodeDebtItem {
                 file_path: PathBuf::from("test.rs"),
@@ -414,6 +598,12 @@ let temp_production_fix = true;
                 line_content: "// mock data".to_string(),
                 pattern_type: "MOCK_STUB".to_string(),
                 severity: Severity::Low,
+                author: None,
+                age_days: None,
+                commit_hash: None,
+                created_at: None,
+                file_extension: None,
+                duplicate_count: 0,
             },
         ];
 
