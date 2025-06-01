@@ -112,7 +112,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@1.74.0  # MSRV - clap requires 1.74+
+      uses: dtolnay/rust-toolchain@1.82.0  # MSRV - icu_locale_core requires 1.82+
 
     - name: Check MSRV
       run: cargo check --all-features
