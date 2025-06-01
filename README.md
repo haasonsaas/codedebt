@@ -86,9 +86,9 @@ let summary = scanner.get_summary(&items);
 - **Memory efficient** streaming with ignore crate
 - **Optimized regex** compilation and matching
 
-Example performance on evalops project (378 items found in 35ms):
+Example performance on codedebt project (57 items found in 3.6ms):
 ```
-⚡ Scanned in 34.46ms
+⚡ Scanned in 3.57ms
 ```
 
 ## Patterns Detected
