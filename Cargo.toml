@@ -28,6 +28,10 @@ serde_json = "1.0"
 colored = "3.0"
 git2 = "0.20"
 chrono = { version = "0.4", features = ["serde"] }
+glob = "0.3"
+notify = "6.1"
+crossterm = "0.27"
+indicatif = "0.17"
 
 [dev-dependencies]
 tempfile = "3.8"
