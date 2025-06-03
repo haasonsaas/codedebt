@@ -1,4 +1,5 @@
 use crate::models::Severity;
+use anyhow::Result;
 use regex::Regex;
 
 #[derive(Debug, Clone)]
@@ -6,6 +7,18 @@ pub struct Pattern {
     pub name: String,
     pub regex: Regex,
     pub severity: Severity,
+}
+
+impl Pattern {
+    /// Create a new pattern with validation
+    pub fn new(name: String, pattern: &str, severity: Severity) -> Result<Self> {
+        let regex = Regex::new(pattern)?;
+        Ok(Pattern {
+            name,
+            regex,
+            severity,
+        })
+    }
 }
 
 impl Pattern {

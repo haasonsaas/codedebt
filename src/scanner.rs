@@ -39,6 +39,11 @@ impl CodeDebtScanner {
     }
 
     pub fn with_patterns(mut self, patterns: Vec<Pattern>) -> Self {
+        // Validate patterns before setting them
+        if patterns.is_empty() {
+            // Keep default patterns if no patterns provided
+            return self;
+        }
         self.patterns = patterns;
         self
     }
@@ -105,37 +110,42 @@ impl CodeDebtScanner {
             let extensions = extensions.clone();
 
             Box::new(move |entry| {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
+                match entry {
+                    Ok(entry) => {
+                        let path = entry.path();
 
-                    if path.is_file() {
-                        if let Some(ext) = path.extension() {
-                            if let Some(ext_str) = ext.to_str() {
-                                if extensions.contains(ext_str) {
-                                    if let Ok(content) = std::fs::read_to_string(path) {
-                                        let items = Self::scan_content(path, &content, &patterns);
-                                        for item in items {
-                                            let _ = tx.send(item);
+                        if path.is_file() {
+                            if let Some(ext) = path.extension() {
+                                if let Some(ext_str) = ext.to_str() {
+                                    if extensions.contains(ext_str) {
+                                        if let Ok(content) = std::fs::read_to_string(path) {
+                                            let items = Self::scan_content(path, &content, &patterns);
+                                            for item in items {
+                                                let _ = tx.send(item);
+                                            }
                                         }
+                                        // Send progress update
+                                        let _ = progress_tx.send(CodeDebtItem {
+                                            file_path: PathBuf::new(),
+                                            line_number: 0,
+                                            column: 0,
+                                            line_content: String::new(),
+                                            pattern_type: "__PROGRESS__".to_string(),
+                                            severity: Severity::Low,
+                                            author: None,
+                                            age_days: None,
+                                            commit_hash: None,
+                                            created_at: None,
+                                            file_extension: None,
+                                            duplicate_count: 0,
+                                        });
                                     }
-                                    // Send progress update
-                                    let _ = progress_tx.send(CodeDebtItem {
-                                        file_path: PathBuf::new(),
-                                        line_number: 0,
-                                        column: 0,
-                                        line_content: String::new(),
-                                        pattern_type: "__PROGRESS__".to_string(),
-                                        severity: Severity::Low,
-                                        author: None,
-                                        age_days: None,
-                                        commit_hash: None,
-                                        created_at: None,
-                                        file_extension: None,
-                                        duplicate_count: 0,
-                                    });
                                 }
                             }
                         }
+                    }
+                    Err(_) => {
+                        // Skip files we can't access (permissions, etc)
                     }
                 }
                 ignore::WalkState::Continue
@@ -165,7 +175,7 @@ impl CodeDebtScanner {
 
         // Add git blame information if enabled
         if self.enable_git_blame {
-            GitAnalyzer::add_git_information(&self.git_repo, &mut results);
+            GitAnalyzer::add_git_information(self.git_repo.as_ref(), &mut results);
         }
 
         // Detect duplicates if enabled

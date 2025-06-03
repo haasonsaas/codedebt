@@ -5,7 +5,7 @@ use git2::{BlameOptions, Repository};
 pub struct GitAnalyzer;
 
 impl GitAnalyzer {
-    pub fn add_git_information(git_repo: &Option<Repository>, items: &mut [CodeDebtItem]) {
+    pub fn add_git_information(git_repo: Option<&Repository>, items: &mut [CodeDebtItem]) {
         if let Some(repo) = git_repo {
             for item in items.iter_mut() {
                 if let Ok(relative_path) = item

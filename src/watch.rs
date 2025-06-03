@@ -3,8 +3,8 @@ use anyhow::Result;
 use colored::*;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
-use std::sync::mpsc::channel;
-use std::time::Duration;
+use std::sync::mpsc::{channel, RecvTimeoutError};
+use std::time::{Duration, Instant};
 
 pub struct CodeDebtWatcher {
     scanner: CodeDebtScanner,
@@ -32,16 +32,30 @@ impl CodeDebtWatcher {
 
         watcher.watch(Path::new(&self.path), RecursiveMode::Recursive)?;
 
-        // Watch for changes
-        for res in rx {
-            match res {
-                Ok(event) => {
+        // Watch for changes with debouncing
+        let debounce_duration = Duration::from_millis(300);
+        let mut last_scan = Instant::now();
+        let mut pending_rescan = false;
+
+        loop {
+            match rx.recv_timeout(debounce_duration) {
+                Ok(Ok(event)) => {
                     if self.should_rescan(&event) {
-                        println!("\n{} Change detected, rescanning...", "🔄".yellow());
-                        self.run_scan()?;
+                        pending_rescan = true;
+                        // Don't scan immediately, wait for debounce
                     }
                 }
-                Err(e) => eprintln!("Watch error: {:?}", e),
+                Ok(Err(e)) => eprintln!("Watch error: {:?}", e),
+                Err(RecvTimeoutError::Timeout) => {
+                    // Check if we have a pending rescan and enough time has passed
+                    if pending_rescan && last_scan.elapsed() >= debounce_duration {
+                        println!("\n{} Change detected, rescanning...", "🔄".yellow());
+                        self.run_scan()?;
+                        last_scan = Instant::now();
+                        pending_rescan = false;
+                    }
+                }
+                Err(RecvTimeoutError::Disconnected) => break,
             }
         }
 

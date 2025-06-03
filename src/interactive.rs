@@ -80,10 +80,11 @@ impl InteractiveMode {
         println!("{}", "─".repeat(60).dimmed());
 
         // Items
-        let start = self.current_index.saturating_sub(10);
-        let end = (start + 20).min(self.filtered_items.len());
+        if !self.filtered_items.is_empty() {
+            let start = self.current_index.saturating_sub(10);
+            let end = (start + 20).min(self.filtered_items.len());
 
-        for (idx, item) in self.filtered_items[start..end].iter().enumerate() {
+            for (idx, item) in self.filtered_items[start..end].iter().enumerate() {
             let abs_idx = start + idx;
             let is_selected = abs_idx == self.current_index;
 
@@ -108,6 +109,7 @@ impl InteractiveMode {
             } else {
                 println!("  {}", line);
             }
+        }
         }
 
         // Help
