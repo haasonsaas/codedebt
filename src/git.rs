@@ -35,14 +35,19 @@ impl GitAnalyzer {
 
                                     if let Ok(commit) = repo.find_commit(oid) {
                                         let timestamp = commit.time().seconds();
-                                        if let Some(datetime) = DateTime::from_timestamp(timestamp, 0) {
+                                        if let Some(datetime) =
+                                            DateTime::from_timestamp(timestamp, 0)
+                                        {
                                             item.created_at = Some(datetime);
                                             let now = Utc::now();
                                             let duration = now.signed_duration_since(datetime);
                                             item.age_days = Some(duration.num_days());
                                             success_count += 1;
                                         } else {
-                                            debug!("Failed to parse timestamp {} for commit {}", timestamp, oid);
+                                            debug!(
+                                                "Failed to parse timestamp {} for commit {}",
+                                                timestamp, oid
+                                            );
                                             error_count += 1;
                                         }
                                     }
