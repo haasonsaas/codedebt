@@ -134,20 +134,21 @@ fn main() -> anyhow::Result<()> {
 
     // Add progress reporter if requested
     if cli.progress && !cli.watch && !cli.interactive {
-        scanner = scanner.with_progress_reporter(
-            Box::new(codedebt::progress::TerminalProgressReporter::new(true))
-        );
+        scanner = scanner.with_progress_reporter(Box::new(
+            codedebt::progress::TerminalProgressReporter::new(true),
+        ));
     }
 
     // Handle watch mode
     if cli.watch {
-        let watcher = codedebt::watch::CodeDebtWatcher::new(scanner, paths[0].to_string_lossy().to_string());
+        let watcher =
+            codedebt::watch::CodeDebtWatcher::new(scanner, paths[0].to_string_lossy().to_string());
         return watcher.watch();
     }
 
     let start = std::time::Instant::now();
     let mut all_items = Vec::new();
-    
+
     // Scan all paths
     for path in &paths {
         match scanner.scan(path) {
@@ -155,7 +156,7 @@ fn main() -> anyhow::Result<()> {
             Err(e) => eprintln!("Error scanning {}: {}", path.display(), e),
         }
     }
-    
+
     let duration = start.elapsed();
 
     // Apply filters
@@ -228,11 +229,9 @@ fn resolve_paths(pattern: &str) -> anyhow::Result<Vec<PathBuf>> {
     // Check if it's a glob pattern
     if pattern.contains('*') || pattern.contains('?') || pattern.contains('[') {
         let mut paths = Vec::new();
-        for entry in glob(pattern)? {
-            if let Ok(path) = entry {
-                if path.is_dir() {
-                    paths.push(path);
-                }
+        for path in glob(pattern)?.flatten() {
+            if path.is_dir() {
+                paths.push(path);
             }
         }
         Ok(paths)

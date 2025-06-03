@@ -144,10 +144,10 @@ impl CodeDebtScanner {
 
         drop(tx);
         drop(progress_tx);
-        
+
         let mut results: Vec<CodeDebtItem> = Vec::new();
         let mut processed_files = 0;
-        
+
         for item in rx.iter() {
             if item.pattern_type == "__PROGRESS__" {
                 processed_files += 1;
@@ -210,7 +210,11 @@ impl CodeDebtScanner {
         Ok(count)
     }
 
-    pub(crate) fn scan_content(file_path: &Path, content: &str, patterns: &[Pattern]) -> Vec<CodeDebtItem> {
+    pub(crate) fn scan_content(
+        file_path: &Path,
+        content: &str,
+        patterns: &[Pattern],
+    ) -> Vec<CodeDebtItem> {
         content
             .lines()
             .enumerate()

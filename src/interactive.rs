@@ -66,10 +66,7 @@ impl InteractiveMode {
         print!("\x1B[2J\x1B[1;1H"); // Clear screen
 
         // Header
-        println!(
-            "{} Code Debt Interactive Explorer",
-            "🔍".cyan().bold()
-        );
+        println!("{} Code Debt Interactive Explorer", "🔍".cyan().bold());
         println!("{}", "═".repeat(60).dimmed());
 
         // Stats
@@ -145,7 +142,8 @@ impl InteractiveMode {
     }
 
     fn page_down(&mut self) {
-        self.current_index = (self.current_index + 10).min(self.filtered_items.len().saturating_sub(1));
+        self.current_index =
+            (self.current_index + 10).min(self.filtered_items.len().saturating_sub(1));
     }
 
     fn cycle_sort(&mut self) {
