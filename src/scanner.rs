@@ -119,7 +119,8 @@ impl CodeDebtScanner {
                                 if let Some(ext_str) = ext.to_str() {
                                     if extensions.contains(ext_str) {
                                         if let Ok(content) = std::fs::read_to_string(path) {
-                                            let items = Self::scan_content(path, &content, &patterns);
+                                            let items =
+                                                Self::scan_content(path, &content, &patterns);
                                             for item in items {
                                                 let _ = tx.send(item);
                                             }

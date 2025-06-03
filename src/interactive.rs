@@ -85,31 +85,31 @@ impl InteractiveMode {
             let end = (start + 20).min(self.filtered_items.len());
 
             for (idx, item) in self.filtered_items[start..end].iter().enumerate() {
-            let abs_idx = start + idx;
-            let is_selected = abs_idx == self.current_index;
+                let abs_idx = start + idx;
+                let is_selected = abs_idx == self.current_index;
 
-            let severity_icon = match item.severity {
-                Severity::Critical => "🚨",
-                Severity::High => "⚠️ ",
-                Severity::Medium => "📝",
-                Severity::Low => "💡",
-            };
+                let severity_icon = match item.severity {
+                    Severity::Critical => "🚨",
+                    Severity::High => "⚠️ ",
+                    Severity::Medium => "📝",
+                    Severity::Low => "💡",
+                };
 
-            let line = format!(
-                "{} {} {} {}:{}",
-                severity_icon,
-                item.pattern_type,
-                item.file_path.display(),
-                item.line_number,
-                item.column
-            );
+                let line = format!(
+                    "{} {} {} {}:{}",
+                    severity_icon,
+                    item.pattern_type,
+                    item.file_path.display(),
+                    item.line_number,
+                    item.column
+                );
 
-            if is_selected {
-                println!("{} {}", ">".green().bold(), line.bold());
-            } else {
-                println!("  {}", line);
+                if is_selected {
+                    println!("{} {}", ">".green().bold(), line.bold());
+                } else {
+                    println!("  {}", line);
+                }
             }
-        }
         }
 
         // Help
