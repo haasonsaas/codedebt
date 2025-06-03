@@ -62,6 +62,7 @@ impl Pattern {
         ]
     }
 
+    // TODO: Consider making file extensions configurable via CLI or config file
     pub fn default_file_extensions() -> Vec<String> {
         vec![
             "rs", "py", "js", "ts", "jsx", "tsx", "go", "java", "c", "cpp", "cc", "cxx", "h",

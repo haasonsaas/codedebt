@@ -172,8 +172,8 @@ impl InteractiveMode {
         match self.sort_by {
             SortBy::Severity => {
                 self.filtered_items.sort_by(|a, b| {
-                    a.severity
-                        .cmp(&b.severity)
+                    b.severity
+                        .cmp(&a.severity)
                         .then_with(|| a.file_path.cmp(&b.file_path))
                 });
             }
