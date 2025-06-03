@@ -1,6 +1,8 @@
 use clap::{Parser, ValueEnum};
 use codedebt::{CodeDebtScanner, Severity};
 use colored::*;
+use glob::glob;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -8,9 +10,9 @@ use std::path::PathBuf;
 #[command(about = "Ultra-fast code debt detection tool")]
 #[command(version)]
 struct Cli {
-    /// Directory to scan
+    /// Directory or glob pattern to scan
     #[arg(default_value = ".")]
-    path: PathBuf,
+    path: String,
 
     /// Minimum severity level to show
     #[arg(short, long, value_enum, default_value = "low")]
@@ -55,6 +57,18 @@ struct Cli {
     /// Show only duplicates with minimum count
     #[arg(long)]
     min_duplicates: Option<usize>,
+
+    /// Enable watch mode
+    #[arg(short, long)]
+    watch: bool,
+
+    /// Enable interactive mode
+    #[arg(short = 'I', long)]
+    interactive: bool,
+
+    /// Show progress indicator for large repositories
+    #[arg(long)]
+    progress: bool,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -84,7 +98,16 @@ enum OutputFormat {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Initialize logger if RUST_LOG env var is set
+    env_logger::init();
+
     let cli = Cli::parse();
+
+    // Handle glob patterns
+    let paths = resolve_paths(&cli.path)?;
+    if paths.is_empty() {
+        return Err(codedebt::error::handle_path_error(&cli.path).into());
+    }
 
     let mut scanner = CodeDebtScanner::new();
 
@@ -113,8 +136,34 @@ fn main() -> anyhow::Result<()> {
         scanner = scanner.with_duplicate_detection(true);
     }
 
+    // Add progress reporter if requested
+    if cli.progress && !cli.watch && !cli.interactive {
+        scanner = scanner.with_progress_reporter(Box::new(
+            codedebt::progress::TerminalProgressReporter::new(true),
+        ));
+    }
+
+    // Handle watch mode
+    if cli.watch {
+        let watch_paths: Vec<String> = paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        let watcher = codedebt::watch::CodeDebtWatcher::new(scanner, watch_paths);
+        return watcher.watch();
+    }
+
     let start = std::time::Instant::now();
-    let all_items = scanner.scan(&cli.path)?;
+    let mut all_items = Vec::new();
+
+    // Scan all paths
+    for path in &paths {
+        match scanner.scan(path) {
+            Ok(items) => all_items.extend(items),
+            Err(e) => eprintln!("Error scanning {}: {}", path.display(), e),
+        }
+    }
+
     let duration = start.elapsed();
 
     // Apply filters
@@ -136,6 +185,12 @@ fn main() -> anyhow::Result<()> {
         } else {
             filtered_items = scanner.find_duplicates(&filtered_items, min_duplicates);
         }
+    }
+
+    // Handle interactive mode
+    if cli.interactive {
+        let mut interactive = codedebt::interactive::InteractiveMode::new(filtered_items);
+        return interactive.run();
     }
 
     match cli.format {
@@ -160,8 +215,9 @@ fn main() -> anyhow::Result<()> {
             }
 
             println!(
-                "\n{} Scanned in {:.2}ms",
+                "\n{} Scanned {} in {:.2}ms",
                 "⚡".bright_yellow(),
+                format_paths(&paths),
                 duration.as_secs_f64() * 1000.0
             );
         }
@@ -174,6 +230,47 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn resolve_paths(pattern: &str) -> anyhow::Result<Vec<PathBuf>> {
+    // Check if it's a glob pattern
+    if pattern.contains('*') || pattern.contains('?') || pattern.contains('[') {
+        let mut paths = HashSet::new();
+        for path in glob(pattern)?.flatten() {
+            if path.is_dir() {
+                paths.insert(path);
+            } else if path.is_file() {
+                // For files, add their parent directory
+                if let Some(parent) = path.parent() {
+                    paths.insert(parent.to_path_buf());
+                }
+            }
+        }
+        Ok(paths.into_iter().collect())
+    } else {
+        // Regular path
+        let path = PathBuf::from(pattern);
+        if path.exists() && path.is_dir() {
+            Ok(vec![path])
+        } else if path.exists() && path.is_file() {
+            // For a single file, scan its parent directory
+            if let Some(parent) = path.parent() {
+                Ok(vec![parent.to_path_buf()])
+            } else {
+                Ok(vec![])
+            }
+        } else {
+            Ok(vec![])
+        }
+    }
+}
+
+fn format_paths(paths: &[PathBuf]) -> String {
+    if paths.len() == 1 {
+        paths[0].display().to_string()
+    } else {
+        format!("{} directories", paths.len())
+    }
 }
 
 fn print_pretty(items: &[codedebt::CodeDebtItem]) {

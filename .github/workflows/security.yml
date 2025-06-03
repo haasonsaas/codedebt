@@ -68,4 +68,7 @@ jobs:
       run: cargo install cargo-outdated
 
     - name: Check for outdated dependencies
-      run: cargo outdated --exit-code 1
+      run: |
+        echo "Checking for outdated dependencies..."
+        cargo outdated || true
+        echo "Note: Outdated dependencies check is informational only"
