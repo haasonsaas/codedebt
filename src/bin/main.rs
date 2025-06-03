@@ -98,6 +98,9 @@ enum OutputFormat {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Initialize logger if RUST_LOG env var is set
+    env_logger::init();
+
     let cli = Cli::parse();
 
     // Handle glob patterns

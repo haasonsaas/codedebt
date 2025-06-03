@@ -56,7 +56,7 @@ impl Pattern {
             },
             Pattern {
                 name: "PRODUCTION_DEBT".to_string(),
-                regex: Regex::new(r"(?i)(temporary|placeholder|mock).*production").unwrap(),
+                regex: Regex::new(r"(?i)(?:temporary|placeholder|mock).*production|production.*(?:temporary|placeholder|mock)").unwrap(),
                 severity: Severity::Critical,
             },
         ]

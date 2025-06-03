@@ -135,3 +135,85 @@ impl CodeDebtWatcher {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scanner::CodeDebtScanner;
+    use notify::{event::ModifyKind, Event, EventKind};
+    use std::path::Path;
+
+    #[test]
+    fn test_should_rescan_filters_extensions() {
+        let scanner = CodeDebtScanner::new();
+        let watcher = CodeDebtWatcher::new(scanner, vec![".".to_string()]);
+
+        // Test that .rs files trigger rescan
+        let rs_event = Event {
+            kind: EventKind::Modify(ModifyKind::Any),
+            paths: vec![Path::new("test.rs").to_path_buf()],
+            attrs: Default::default(),
+        };
+        assert!(watcher.should_rescan(&rs_event));
+
+        // Test that .txt files don't trigger rescan
+        let txt_event = Event {
+            kind: EventKind::Modify(ModifyKind::Any),
+            paths: vec![Path::new("test.txt").to_path_buf()],
+            attrs: Default::default(),
+        };
+        assert!(!watcher.should_rescan(&txt_event));
+
+        // Test that files without extension don't trigger rescan
+        let no_ext_event = Event {
+            kind: EventKind::Modify(ModifyKind::Any),
+            paths: vec![Path::new("README").to_path_buf()],
+            attrs: Default::default(),
+        };
+        assert!(!watcher.should_rescan(&no_ext_event));
+    }
+
+    #[test]
+    fn test_multiple_paths_support() {
+        let scanner = CodeDebtScanner::new();
+        let paths = vec![
+            "/path/one".to_string(),
+            "/path/two".to_string(),
+            "/path/three".to_string(),
+        ];
+
+        let watcher = CodeDebtWatcher::new(scanner, paths.clone());
+        assert_eq!(watcher.paths.len(), 3);
+        assert_eq!(watcher.paths, paths);
+    }
+
+    #[test]
+    fn test_event_kind_filtering() {
+        let scanner = CodeDebtScanner::new();
+        let watcher = CodeDebtWatcher::new(scanner, vec![".".to_string()]);
+
+        // Create events trigger rescan
+        let create_event = Event {
+            kind: EventKind::Create(notify::event::CreateKind::File),
+            paths: vec![Path::new("test.rs").to_path_buf()],
+            attrs: Default::default(),
+        };
+        assert!(watcher.should_rescan(&create_event));
+
+        // Remove events trigger rescan
+        let remove_event = Event {
+            kind: EventKind::Remove(notify::event::RemoveKind::File),
+            paths: vec![Path::new("test.rs").to_path_buf()],
+            attrs: Default::default(),
+        };
+        assert!(watcher.should_rescan(&remove_event));
+
+        // Access events don't trigger rescan
+        let access_event = Event {
+            kind: EventKind::Access(notify::event::AccessKind::Read),
+            paths: vec![Path::new("test.rs").to_path_buf()],
+            attrs: Default::default(),
+        };
+        assert!(!watcher.should_rescan(&access_event));
+    }
+}
