@@ -317,7 +317,7 @@ impl CodeDebtScanner {
     pub fn filter_by_age(&self, items: &[CodeDebtItem], max_age_days: i64) -> Vec<CodeDebtItem> {
         items
             .iter()
-            .filter(|item| item.age_days.is_none_or(|age| age <= max_age_days))
+            .filter(|item| item.age_days.map_or(true, |age| age <= max_age_days))
             .cloned()
             .collect()
     }
