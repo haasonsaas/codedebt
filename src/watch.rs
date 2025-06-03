@@ -8,12 +8,12 @@ use std::time::{Duration, Instant};
 
 pub struct CodeDebtWatcher {
     scanner: CodeDebtScanner,
-    path: String,
+    paths: Vec<String>,
 }
 
 impl CodeDebtWatcher {
-    pub fn new(scanner: CodeDebtScanner, path: String) -> Self {
-        Self { scanner, path }
+    pub fn new(scanner: CodeDebtScanner, paths: Vec<String>) -> Self {
+        Self { scanner, paths }
     }
 
     pub fn watch(&self) -> Result<()> {
@@ -30,7 +30,10 @@ impl CodeDebtWatcher {
             Config::default().with_poll_interval(Duration::from_secs(1)),
         )?;
 
-        watcher.watch(Path::new(&self.path), RecursiveMode::Recursive)?;
+        // Watch all paths
+        for path in &self.paths {
+            watcher.watch(Path::new(path), RecursiveMode::Recursive)?;
+        }
 
         // Watch for changes with debouncing
         let debounce_duration = Duration::from_millis(300);
@@ -80,21 +83,30 @@ impl CodeDebtWatcher {
 
     fn run_scan(&self) -> Result<()> {
         let start = std::time::Instant::now();
-        let items = self.scanner.scan(&self.path)?;
+        let mut all_items = Vec::new();
+
+        // Scan all paths
+        for path in &self.paths {
+            match self.scanner.scan(path) {
+                Ok(items) => all_items.extend(items),
+                Err(e) => eprintln!("Error scanning {}: {}", path, e),
+            }
+        }
+
         let duration = start.elapsed();
 
         // Clear screen
         print!("\x1B[2J\x1B[1;1H");
 
-        if items.is_empty() {
+        if all_items.is_empty() {
             println!("{} No code debt found!", "✅".green());
         } else {
-            println!("{} {} code debt items found:", "🔍".cyan(), items.len());
+            println!("{} {} code debt items found:", "🔍".cyan(), all_items.len());
             println!("{}", "─".repeat(50).dimmed());
 
             // Show summary by severity
             let mut by_severity = std::collections::HashMap::new();
-            for item in &items {
+            for item in &all_items {
                 *by_severity
                     .entry(format!("{:?}", item.severity))
                     .or_insert(0) += 1;

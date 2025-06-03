@@ -197,10 +197,10 @@ impl InteractiveMode {
     }
 
     fn apply_filter(&mut self) {
-        self.filtered_items = if let Some(min_severity) = &self.filter_severity {
+        self.filtered_items = if let Some(max_severity) = &self.filter_severity {
             self.items
                 .iter()
-                .filter(|item| &item.severity <= min_severity)
+                .filter(|item| item.severity <= *max_severity)
                 .cloned()
                 .collect()
         } else {

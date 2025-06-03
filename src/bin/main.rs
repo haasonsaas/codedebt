@@ -2,6 +2,7 @@ use clap::{Parser, ValueEnum};
 use codedebt::{CodeDebtScanner, Severity};
 use colored::*;
 use glob::glob;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -141,8 +142,11 @@ fn main() -> anyhow::Result<()> {
 
     // Handle watch mode
     if cli.watch {
-        let watcher =
-            codedebt::watch::CodeDebtWatcher::new(scanner, paths[0].to_string_lossy().to_string());
+        let watch_paths: Vec<String> = paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        let watcher = codedebt::watch::CodeDebtWatcher::new(scanner, watch_paths);
         return watcher.watch();
     }
 
@@ -228,18 +232,30 @@ fn main() -> anyhow::Result<()> {
 fn resolve_paths(pattern: &str) -> anyhow::Result<Vec<PathBuf>> {
     // Check if it's a glob pattern
     if pattern.contains('*') || pattern.contains('?') || pattern.contains('[') {
-        let mut paths = Vec::new();
+        let mut paths = HashSet::new();
         for path in glob(pattern)?.flatten() {
             if path.is_dir() {
-                paths.push(path);
+                paths.insert(path);
+            } else if path.is_file() {
+                // For files, add their parent directory
+                if let Some(parent) = path.parent() {
+                    paths.insert(parent.to_path_buf());
+                }
             }
         }
-        Ok(paths)
+        Ok(paths.into_iter().collect())
     } else {
         // Regular path
         let path = PathBuf::from(pattern);
         if path.exists() && path.is_dir() {
             Ok(vec![path])
+        } else if path.exists() && path.is_file() {
+            // For a single file, scan its parent directory
+            if let Some(parent) = path.parent() {
+                Ok(vec![parent.to_path_buf()])
+            } else {
+                Ok(vec![])
+            }
         } else {
             Ok(vec![])
         }
