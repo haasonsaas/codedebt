@@ -13,10 +13,16 @@ impl GitAnalyzer {
             let mut error_count = 0;
 
             for item in items.iter_mut() {
-                match item
-                    .file_path
-                    .strip_prefix(repo.workdir().unwrap_or_else(|| std::path::Path::new(".")))
-                {
+                let workdir = match repo.workdir() {
+                    Some(dir) => dir,
+                    None => {
+                        debug!("Repository has no working directory");
+                        error_count += 1;
+                        continue;
+                    }
+                };
+
+                match item.file_path.strip_prefix(workdir) {
                     Ok(relative_path) => {
                         match repo.blame_file(relative_path, Some(&mut BlameOptions::new())) {
                             Ok(blame) => {
@@ -29,13 +35,16 @@ impl GitAnalyzer {
 
                                     if let Ok(commit) = repo.find_commit(oid) {
                                         let timestamp = commit.time().seconds();
-                                        let datetime = DateTime::from_timestamp(timestamp, 0)
-                                            .unwrap_or_else(Utc::now);
-                                        item.created_at = Some(datetime);
-                                        let now = Utc::now();
-                                        let duration = now.signed_duration_since(datetime);
-                                        item.age_days = Some(duration.num_days());
-                                        success_count += 1;
+                                        if let Some(datetime) = DateTime::from_timestamp(timestamp, 0) {
+                                            item.created_at = Some(datetime);
+                                            let now = Utc::now();
+                                            let duration = now.signed_duration_since(datetime);
+                                            item.age_days = Some(duration.num_days());
+                                            success_count += 1;
+                                        } else {
+                                            debug!("Failed to parse timestamp {} for commit {}", timestamp, oid);
+                                            error_count += 1;
+                                        }
                                     }
                                 }
                             }
