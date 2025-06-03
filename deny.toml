@@ -7,6 +7,8 @@ allow = [
     "Apache-2.0",
     "MPL-2.0",        # Mozilla Public License 2.0 (used by colored crate)
     "Unicode-3.0",    # Unicode License v3 (used by unicode-ident)
+    "ISC",            # ISC License (used by inotify crates)
+    "CC0-1.0",        # Creative Commons Zero v1.0 Universal (used by notify)
 ]
 
 # Confidence threshold for detecting a license from a license text.
